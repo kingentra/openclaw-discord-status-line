@@ -1,6 +1,6 @@
 {
   "name": "openclaw-discord-status-line",
-  "version": "0.1.0-draft",
+  "version": "0.1.1-draft",
   "description": "Draft OpenClaw plugin that appends compact Discord reply status lines.",
   "type": "module",
   "private": true,
@@ -38,4 +38,3 @@
   },
   "devDependencies": {}
 }
-

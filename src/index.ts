@@ -24,8 +24,6 @@ type ReplyPayloadSendingEventLike = {
   usageState?: unknown;
 };
 
-let turnToolCallCount = 0;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -69,7 +67,10 @@ function handleReplyPayloadSending(event: unknown, api: OpenClawLikeApi): unknow
     originalText,
     {
       usageState: isRecord(replyEvent.usageState) ? replyEvent.usageState : undefined,
-      toolCalls: turnToolCallCount,
+      // Tool-count metadata is not part of the verified reply_payload_sending
+      // usageState contract yet. Keep v0.1.1 passive and fail-soft until a live
+      // OpenClaw test proves a stable turn-scoped source for tool call counts.
+      toolCalls: 0,
     },
     resolvedConfig,
   );
@@ -81,24 +82,13 @@ function handleReplyPayloadSending(event: unknown, api: OpenClawLikeApi): unknow
   };
 }
 
-function handleAfterToolCall(): void {
-  turnToolCallCount += 1;
-}
-
-function handleTurnStart(): void {
-  turnToolCallCount = 0;
-}
-
 export function register(api: OpenClawLikeApi): void {
   // Draft integration note:
-  // OpenClaw 2026.5.x exposes typed plugin hooks including reply_payload_sending
-  // and after_tool_call. The exact public registration helper may be api.on(...)
-  // for extension events or api.registerHook(...) for plugin hook events,
-  // depending on packaging. This supports both without reaching into runtime
-  // internals. Live install still needs verification against OpenClaw's loader.
+  // OpenClaw 2026.6.x exposes reply_payload_sending as a typed plugin hook.
+  // Other lifecycle/tool hooks are intentionally not registered in v0.1.1
+  // because turn_start was not proven as a plugin hook, and tool-call counting
+  // needs a live test before it should influence production replies.
   if (typeof api.registerHook === "function") {
-    api.registerHook("turn_start", handleTurnStart);
-    api.registerHook("after_tool_call", handleAfterToolCall);
     api.registerHook("reply_payload_sending", (event) =>
       handleReplyPayloadSending(event, api),
     );
@@ -106,8 +96,8 @@ export function register(api: OpenClawLikeApi): void {
   }
 
   if (typeof api.on === "function") {
-    api.on("turn_start", handleTurnStart);
-    api.on("after_tool_call", handleAfterToolCall);
+    // Extension-style registration is kept as a defensive loader fallback only.
+    // The intended OpenClaw hook remains reply_payload_sending.
     api.on("reply_payload_sending", (event) =>
       handleReplyPayloadSending(event, api),
     );
@@ -120,4 +110,3 @@ export default {
   description: "Draft inline Discord reply status line plugin for OpenClaw.",
   register,
 };
-
