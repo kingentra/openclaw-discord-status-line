@@ -1,0 +1,44 @@
+{
+  "id": "openclaw-discord-status-line",
+  "name": "OpenClaw Discord Status Line",
+  "description": "Draft plugin that appends compact status metadata to Discord replies.",
+  "activation": {
+    "onStartup": false
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "channels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "discord"
+        ]
+      },
+      "template": {
+        "type": "string",
+        "default": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*"
+      },
+      "fallbackTemplate": {
+        "type": "string",
+        "default": "-# *{duration} • tools:{tool_calls} • {model}*"
+      },
+      "includeWhenUnknown": {
+        "type": "boolean",
+        "default": true
+      },
+      "separator": {
+        "type": "string",
+        "default": "\n\n"
+      }
+    }
+  }
+}
+

@@ -1,0 +1,22 @@
+{
+  "plugins": {
+    "openclaw-discord-status-line": {
+      "enabled": false,
+      "hooks": {
+        "allowConversationAccess": false,
+        "timeoutMs": 1000
+      },
+      "config": {
+        "enabled": true,
+        "channels": [
+          "discord"
+        ],
+        "template": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*",
+        "fallbackTemplate": "-# *{duration} • tools:{tool_calls} • {model}*",
+        "includeWhenUnknown": true,
+        "separator": "\n\n"
+      }
+    }
+  }
+}
+

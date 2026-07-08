@@ -1,0 +1,41 @@
+{
+  "name": "openclaw-discord-status-line",
+  "version": "0.1.0-draft",
+  "description": "Draft OpenClaw plugin that appends compact Discord reply status lines.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./format-status-line": "./src/format-status-line.ts",
+    "./metadata": "./src/metadata.ts",
+    "./config": "./src/config.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "keywords": [
+    "openclaw",
+    "discord",
+    "status-line",
+    "plugin"
+  ],
+  "license": "MIT",
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.5.19"
+    },
+    "install": {
+      "defaultChoice": "local",
+      "minHostVersion": ">=2026.5.19"
+    },
+    "runtimeExtensions": [
+      "./src/index.ts"
+    ]
+  },
+  "devDependencies": {}
+}
+
