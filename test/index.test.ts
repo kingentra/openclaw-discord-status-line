@@ -56,6 +56,37 @@ test("reply hook appends fallback metadata without throwing when usageState is m
   });
 });
 
+test("reply hook returns only the assumed payload mutation shape", () => {
+  let handler: ((event: unknown) => unknown) | undefined;
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  const result = handler({
+    channel: "discord",
+    payload: {
+      content: "reply body",
+      untouched: true,
+    },
+  });
+
+  assert.deepEqual(result, {
+    payload: {
+      content: "reply body\n\n-# *unknown • tools:0 • unknown*",
+      untouched: true,
+    },
+  });
+  assert.deepEqual(Object.keys(result as Record<string, unknown>), ["payload"]);
+});
+
 test("reply hook only handles configured Discord channel IDs when allowlist is set", () => {
   let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
 

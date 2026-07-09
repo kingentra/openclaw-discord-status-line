@@ -2,11 +2,32 @@
 
 Draft v0.1.1 scaffold for an OpenClaw plugin that appends a compact status line to outgoing Discord replies.
 
+## Current Status
+
+Local tests pass for the draft plugin helpers and hook handler assumptions.
+Live OpenClaw Discord hook integration is not proven.
+
+A controlled live test delivered only `STATUS LINE TEST OK`; no appended footer
+was seen in durable delivery state. Rollback completed, OpenClaw health was OK,
+and the plugin was not left installed or listed.
+
+The next investigation step is to verify the `reply_payload_sending` payload
+shape and mutation return contract with safe structural diagnostics before any
+new live attempt. Do not live-install this plugin until that contract is
+verified.
+
+See [docs/failed-live-test-notes.md](docs/failed-live-test-notes.md) for the
+public-safe failure notes and diagnostic-mode design.
+
 ## Draft Warning
 
-This plugin is not live-installed yet. It has not been loaded into OpenClaw, and no live Discord reply mutation has been tested. Do not copy it into a live OpenClaw profile, enable it in runtime config, or restart OpenClaw until the operator approves a controlled live test.
+This plugin is not currently live-installed. A controlled live attempt did not
+prove Discord reply mutation, and rollback completed. Do not copy it into a
+live OpenClaw profile, enable it in runtime config, or restart OpenClaw until
+the hook payload contract is verified and the operator approves a new
+controlled test.
 
-The intended hook is `reply_payload_sending`. Static inspection of OpenClaw 2026.6.x showed that this hook exists and supports reply payload mutation, but the exact live payload shape and channel metadata still need a one-message non-production test.
+The intended hook is `reply_payload_sending`. Static inspection of OpenClaw 2026.6.x showed that this hook exists and supports reply payload mutation, but the exact live payload shape, channel metadata, and mutation return contract still need non-production verification with safe diagnostics.
 
 ## What This Is
 
@@ -101,7 +122,9 @@ Keep both outer `enabled` and inner `config.enabled` false until a controlled te
 
 ## Safe One-Message Test Plan
 
-Use this only after the operator explicitly approves install and restart/reload steps.
+Use this only after the hook payload contract is verified and the operator
+explicitly approves install and restart/reload steps. No live install is
+recommended while the mutation return contract remains unverified.
 
 1. Confirm the git working tree is clean.
 2. Back up the relevant OpenClaw config/state before editing anything.
@@ -127,10 +150,19 @@ This plugin should not expose session IDs, account IDs, sender IDs, raw prompts,
 
 v0.1.1 does not access the Discord token directly. It does not call Discord REST APIs. It does not send separate follow-up messages. It only attempts to modify the outbound reply payload through OpenClaw's hook system.
 
+If an opt-in diagnostic mode is added, it must remain disabled by default and
+must log only structural facts such as field names, booleans, counts, and
+generic platform/channel-id presence flags. It must not log tokens, secrets,
+raw prompts, tool arguments, tool results, private channel names, user IDs,
+Discord channel IDs, local runtime paths, private logs, or config values.
+
 ## Development Status
 
 - Pure formatting helpers exist and are covered by local tests.
 - `src/index.ts` registers only the intended `reply_payload_sending` hook.
 - Missing metadata and missing payloads are handled defensively.
-- Live install, live hook loading, live payload mutation, and real Discord channel ID discovery are still pending controlled verification.
+- Live hook loading and payload mutation are not proven; the failed live test
+  indicates the Discord reply payload was not successfully mutated.
+- The next investigation step is safe structural verification of the live hook
+  payload shape and mutation return contract.
 - No OpenClaw runtime files have been modified by this repo.

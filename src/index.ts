@@ -109,6 +109,10 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
 
   if (!appended.appended) return undefined;
 
+  // Current OpenClaw mutation assumption: reply_payload_sending accepts a
+  // partial event update shaped as { payload: <updated payload> }. Keep this
+  // explicit because the failed live test may indicate a return-contract
+  // mismatch rather than a formatting problem.
   return {
     payload: writeTextPayload(replyEvent.payload, appended.text),
   };
