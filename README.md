@@ -17,7 +17,10 @@ new live attempt. Do not live-install this plugin until that contract is
 verified.
 
 See [docs/failed-live-test-notes.md](docs/failed-live-test-notes.md) for the
-public-safe failure notes and diagnostic-mode design.
+public-safe failure notes and diagnostic-mode design. See
+[docs/hook-contract-investigation-plan.md](docs/hook-contract-investigation-plan.md)
+for the repo-local plan to learn the real hook payload and mutation contract
+without exposing private runtime data.
 
 ## Draft Warning
 
@@ -28,6 +31,10 @@ the hook payload contract is verified and the operator approves a new
 controlled test.
 
 The intended hook is `reply_payload_sending`. Static inspection of OpenClaw 2026.6.x showed that this hook exists and supports reply payload mutation, but the exact live payload shape, channel metadata, and mutation return contract still need non-production verification with safe diagnostics.
+
+The current draft handler attempts both an in-place `event.payload` text-field
+mutation and a returned `{ payload: ... }` wrapper for compatibility. That is a
+defensive assumption, not proof of the live OpenClaw contract.
 
 ## What This Is
 
@@ -165,4 +172,6 @@ Discord channel IDs, local runtime paths, private logs, or config values.
   indicates the Discord reply payload was not successfully mutated.
 - The next investigation step is safe structural verification of the live hook
   payload shape and mutation return contract.
+- The hook contract investigation plan is documented in
+  [docs/hook-contract-investigation-plan.md](docs/hook-contract-investigation-plan.md).
 - No OpenClaw runtime files have been modified by this repo.

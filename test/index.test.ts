@@ -56,7 +56,7 @@ test("reply hook appends fallback metadata without throwing when usageState is m
   });
 });
 
-test("reply hook returns only the assumed payload mutation shape", () => {
+test("reply hook returns a wrapper with a modified payload", () => {
   let handler: ((event: unknown) => unknown) | undefined;
 
   register({
@@ -70,13 +70,14 @@ test("reply hook returns only the assumed payload mutation shape", () => {
   });
 
   assert.ok(handler);
-  const result = handler({
+  const event = {
     channel: "discord",
     payload: {
       content: "reply body",
       untouched: true,
     },
-  });
+  };
+  const result = handler(event);
 
   assert.deepEqual(result, {
     payload: {
@@ -85,6 +86,71 @@ test("reply hook returns only the assumed payload mutation shape", () => {
     },
   });
   assert.deepEqual(Object.keys(result as Record<string, unknown>), ["payload"]);
+});
+
+test("reply hook also mutates event.payload in place for compatibility", () => {
+  let handler: ((event: unknown) => unknown) | undefined;
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  const event = {
+    channel: "discord",
+    payload: {
+      body: "reply body",
+      untouched: true,
+    },
+  };
+  const result = handler(event);
+
+  assert.equal(event.payload.body, "reply body\n\n-# *unknown • tools:0 • unknown*");
+  assert.equal(event.payload.untouched, true);
+  assert.deepEqual(result, {
+    payload: {
+      body: "reply body\n\n-# *unknown • tools:0 • unknown*",
+      untouched: true,
+    },
+  });
+});
+
+test("reply hook wrapper payload preserves object shape after in-place mutation", () => {
+  let handler: ((event: unknown) => unknown) | undefined;
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  const event = {
+    channel: "discord",
+    payload: {
+      text: "reply body",
+      body: "secondary body",
+    },
+  };
+  const result = handler(event) as { payload?: { text?: string; body?: string } };
+
+  assert.deepEqual(result, {
+    payload: {
+      text: "reply body\n\n-# *unknown • tools:0 • unknown*",
+      body: "secondary body",
+    },
+  });
+  assert.equal(event.payload.text, result.payload?.text);
 });
 
 test("reply hook only handles configured Discord channel IDs when allowlist is set", () => {

@@ -52,6 +52,22 @@ function writeTextPayload(payload: ReplyPayloadLike, text: string): ReplyPayload
   return { ...payload, text };
 }
 
+function mutateTextPayloadInPlace(payload: ReplyPayloadLike, text: string): void {
+  if (typeof payload.text === "string") {
+    payload.text = text;
+    return;
+  }
+  if (typeof payload.body === "string") {
+    payload.body = text;
+    return;
+  }
+  if (typeof payload.content === "string") {
+    payload.content = text;
+    return;
+  }
+  payload.text = text;
+}
+
 function shouldHandleChannel(event: ReplyPayloadSendingEventLike, channels: string[]): boolean {
   const channel = typeof event.channel === "string" ? event.channel : undefined;
   if (!channel) return false;
@@ -109,12 +125,18 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
 
   if (!appended.appended) return undefined;
 
-  // Current OpenClaw mutation assumption: reply_payload_sending accepts a
-  // partial event update shaped as { payload: <updated payload> }. Keep this
-  // explicit because the failed live test may indicate a return-contract
-  // mismatch rather than a formatting problem.
+  const updatedPayload = writeTextPayload(replyEvent.payload, appended.text);
+
+  // Contract status: not proven. The failed live test may have missed the
+  // footer because OpenClaw expects in-place event.payload mutation, a returned
+  // wrapper shaped as { payload }, a different wrapper, or because the tested
+  // delivery path bypassed this hook. For now, try the two safest local forms:
+  // mutate the known payload text field in place and also return { payload }.
+  // Do not treat either form as confirmed until a controlled diagnostic test
+  // proves the live OpenClaw reply contract.
+  mutateTextPayloadInPlace(replyEvent.payload, appended.text);
   return {
-    payload: writeTextPayload(replyEvent.payload, appended.text),
+    payload: updatedPayload,
   };
 }
 
