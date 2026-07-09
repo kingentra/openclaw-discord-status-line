@@ -1,6 +1,7 @@
 export type StatusLineConfig = {
   enabled: boolean;
   channels: string[];
+  channelIds: string[];
   template: string;
   fallbackTemplate: string;
   includeWhenUnknown: boolean;
@@ -16,6 +17,7 @@ export const DEFAULT_FALLBACK_TEMPLATE =
 export const DEFAULT_CONFIG: StatusLineConfig = {
   enabled: false,
   channels: ["discord"],
+  channelIds: [],
   template: DEFAULT_TEMPLATE,
   fallbackTemplate: DEFAULT_FALLBACK_TEMPLATE,
   includeWhenUnknown: true,
@@ -38,6 +40,13 @@ function readChannels(value: unknown): string[] {
   return channels.length > 0 ? channels : DEFAULT_CONFIG.channels;
 }
 
+function readChannelIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return DEFAULT_CONFIG.channelIds;
+  return value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
+}
+
 export function resolveStatusLineConfig(input: unknown): StatusLineConfig {
   const source =
     input && typeof input === "object" && !Array.isArray(input)
@@ -47,6 +56,7 @@ export function resolveStatusLineConfig(input: unknown): StatusLineConfig {
   return {
     enabled: readBoolean(source.enabled, DEFAULT_CONFIG.enabled),
     channels: readChannels(source.channels),
+    channelIds: readChannelIds(source.channelIds),
     template: readString(source.template, DEFAULT_CONFIG.template),
     fallbackTemplate: readString(
       source.fallbackTemplate,
@@ -59,4 +69,3 @@ export function resolveStatusLineConfig(input: unknown): StatusLineConfig {
     separator: readString(source.separator, DEFAULT_CONFIG.separator),
   };
 }
-

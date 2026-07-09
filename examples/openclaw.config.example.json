@@ -7,10 +7,11 @@
         "timeoutMs": 1000
       },
       "config": {
-        "enabled": true,
+        "enabled": false,
         "channels": [
           "discord"
         ],
+        "channelIds": [],
         "template": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*",
         "fallbackTemplate": "-# *{duration} • tools:{tool_calls} • {model}*",
         "includeWhenUnknown": true,
@@ -19,4 +20,3 @@
     }
   }
 }
-

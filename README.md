@@ -2,19 +2,15 @@
 
 Draft v0.1.1 scaffold for an OpenClaw plugin that appends a compact status line to outgoing Discord replies.
 
-Public repo: <https://github.com/kingentra/openclaw-discord-status-line>
-
-Issue #1 tracks live install verification: <https://github.com/kingentra/openclaw-discord-status-line/issues/1>
-
 ## Draft Warning
 
-This plugin is not live-installed yet. It has not been loaded into OpenClaw, and no live Discord reply mutation has been tested. Do not copy it into `~/.openclaw`, enable it in runtime config, or restart OpenClaw until GG explicitly approves a controlled live test.
+This plugin is not live-installed yet. It has not been loaded into OpenClaw, and no live Discord reply mutation has been tested. Do not copy it into a live OpenClaw profile, enable it in runtime config, or restart OpenClaw until the operator approves a controlled live test.
 
 The intended hook is `reply_payload_sending`. Static inspection of OpenClaw 2026.6.x showed that this hook exists and supports reply payload mutation, but the exact live payload shape and channel metadata still need a one-message non-production test.
 
 ## What This Is
 
-`openclaw-discord-status-line` is an OpenClaw-specific port of the Hermes Discord status line idea. The v0.1.1 goal is deliberately small: append passive response metadata to the same Discord reply OpenClaw is already sending.
+`openclaw-discord-status-line` is an OpenClaw-specific status line plugin. The v0.1.1 goal is deliberately small: append passive response metadata to the same Discord reply OpenClaw is already sending.
 
 Default full template:
 
@@ -38,7 +34,7 @@ The earlier draft referenced `turn_start` and `after_tool_call`; those are not a
 
 ## Channel Filtering
 
-The current `channels` config is a platform filter, not a verified Discord channel ID allowlist.
+The `channels` config is a platform filter.
 
 Example:
 
@@ -48,7 +44,13 @@ Example:
 
 This means "only handle reply events whose OpenClaw hook event reports the `discord` platform." It does not mean "only handle Discord channel ID 123..." and must not be treated as a production per-channel safety control yet.
 
-A real Discord channel ID allowlist should only be added after a live hook event or typed context proves where the Discord channel ID is exposed.
+The optional `channelIds` config is a Discord conversation/channel allowlist. Leave it empty to handle all matching Discord reply events. To restrict the plugin to a test channel, replace the placeholder with your own Discord channel ID:
+
+```json
+"channelIds": ["YOUR_TEST_CHANNEL_ID_HERE"]
+```
+
+Do not commit real Discord channel IDs to this repository.
 
 ## Why Inline Append In v0.1.1
 
@@ -56,13 +58,9 @@ Inline append is the safest first version because it does not need Discord bot t
 
 ## Draft Install Path Candidates
 
-Static investigation found these likely OpenClaw plugin install surfaces:
+Static investigation found that OpenClaw can install plugins from local paths, but the exact install surface can vary by host and OpenClaw version.
 
-- Managed npm plugins: `~/.openclaw/npm/projects/<hashed-project>/node_modules/<package>`
-- Local path installs: likely copied or tracked through `~/.openclaw/extensions/<plugin-id>`
-- Install registry/index: `~/.openclaw/plugins/installs.json`
-
-Do not treat these as a live install recipe yet. Use `openclaw plugins install <local-repo-path>` only after GG approves the live test.
+Do not treat this as a live install recipe yet. Use `openclaw plugins install /path/to/openclaw-discord-status-line` only after the operator approves the live test.
 
 ## Config Example
 
@@ -78,8 +76,9 @@ See [examples/openclaw.config.example.json](examples/openclaw.config.example.jso
         "timeoutMs": 1000
       },
       "config": {
-        "enabled": true,
+        "enabled": false,
         "channels": ["discord"],
+        "channelIds": [],
         "template": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*",
         "fallbackTemplate": "-# *{duration} • tools:{tool_calls} • {model}*",
         "includeWhenUnknown": true,
@@ -102,17 +101,17 @@ Keep both outer `enabled` and inner `config.enabled` false until a controlled te
 
 ## Safe One-Message Test Plan
 
-Use this only after GG explicitly approves install and restart/reload steps.
+Use this only after the operator explicitly approves install and restart/reload steps.
 
 1. Confirm the git working tree is clean.
 2. Back up the relevant OpenClaw config/state before editing anything.
-3. Install from this local repo only; do not install from npm or an unreviewed source.
-4. Enable the plugin with `channels: ["discord"]` and a test-only template.
+3. Install from `/path/to/openclaw-discord-status-line` only; do not install from npm or an unreviewed source.
+4. Enable the plugin with `channels: ["discord"]`, `channelIds: ["YOUR_TEST_CHANNEL_ID_HERE"]`, and a test-only template.
 5. Use a non-production Discord test channel or disposable route.
 6. Send exactly one message that should produce one OpenClaw reply.
 7. Verify the status line appears on the same reply, not as a second message.
 8. Confirm no secrets, IDs, prompts, tool arguments, or tool results are exposed.
-9. Disable the plugin after the test unless GG approves continued testing.
+9. Disable the plugin after the test unless the operator approves continued testing.
 
 ## Rollback Plan
 
@@ -120,7 +119,7 @@ Use this only after GG explicitly approves install and restart/reload steps.
 2. Remove the local plugin install through the approved OpenClaw plugin workflow.
 3. If OpenClaw copied files, remove only the approved plugin install directory after confirming the path.
 4. Restore the pre-test config/state backup if behavior is abnormal.
-5. Restart or reload OpenClaw only after GG approves that operation.
+5. Restart or reload OpenClaw only after the operator approves that operation.
 
 ## Security Notes
 
@@ -133,5 +132,5 @@ v0.1.1 does not access the Discord token directly. It does not call Discord REST
 - Pure formatting helpers exist and are covered by local tests.
 - `src/index.ts` registers only the intended `reply_payload_sending` hook.
 - Missing metadata and missing payloads are handled defensively.
-- Live install, live hook loading, live payload mutation, and real Discord channel ID discovery are still pending Issue #1 verification.
+- Live install, live hook loading, live payload mutation, and real Discord channel ID discovery are still pending controlled verification.
 - No OpenClaw runtime files have been modified by this repo.

@@ -56,6 +56,56 @@ test("reply hook appends fallback metadata without throwing when usageState is m
   });
 });
 
+test("reply hook only handles configured Discord channel IDs when allowlist is set", () => {
+  let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+      channelIds: ["YOUR_TEST_CHANNEL_ID_HERE"],
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  assert.equal(
+    handler(
+      {
+        channel: "discord",
+        payload: {
+          text: "reply body",
+        },
+      },
+      {
+        conversationId: "OTHER_CHANNEL_ID",
+      },
+    ),
+    undefined,
+  );
+
+  assert.deepEqual(
+    handler(
+      {
+        channel: "discord",
+        payload: {
+          text: "reply body",
+        },
+      },
+      {
+        conversationId: "channel:YOUR_TEST_CHANNEL_ID_HERE",
+      },
+    ),
+    {
+      payload: {
+        text: "reply body\n\n-# *unknown • tools:0 • unknown*",
+      },
+    },
+  );
+});
+
 test("reply hook ignores missing payloads and non-matching platform filters safely", () => {
   let handler: ((event: unknown) => unknown) | undefined;
 

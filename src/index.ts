@@ -7,7 +7,11 @@ type OpenClawLikeApi = {
   registerHook?: (
     events: string | string[],
     handler: (event: unknown, ctx?: unknown) => unknown,
-    opts?: Record<string, unknown>,
+    opts?: {
+      name?: string;
+      description?: string;
+      timeoutMs?: number;
+    },
   ) => void;
 };
 
@@ -22,6 +26,10 @@ type ReplyPayloadSendingEventLike = {
   kind?: unknown;
   payload?: ReplyPayloadLike;
   usageState?: unknown;
+};
+
+type ReplyPayloadSendingContextLike = {
+  conversationId?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,7 +58,23 @@ function shouldHandleChannel(event: ReplyPayloadSendingEventLike, channels: stri
   return channels.includes(channel);
 }
 
-function handleReplyPayloadSending(event: unknown, api: OpenClawLikeApi): unknown {
+function normalizeDiscordConversationId(value: string): string {
+  return value.trim().replace(/^channel:/i, "");
+}
+
+function shouldHandleChannelId(ctx: ReplyPayloadSendingContextLike, channelIds: string[]): boolean {
+  if (channelIds.length === 0) return true;
+  const conversationId =
+    typeof ctx.conversationId === "string" ? ctx.conversationId : undefined;
+  if (!conversationId) return false;
+  const normalizedConversationId = normalizeDiscordConversationId(conversationId);
+  return channelIds.some(
+    (channelId) =>
+      normalizeDiscordConversationId(channelId) === normalizedConversationId,
+  );
+}
+
+function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLikeApi): unknown {
   if (!isRecord(event)) return undefined;
 
   const resolvedConfig = resolveStatusLineConfig(api.pluginConfig);
@@ -58,6 +82,14 @@ function handleReplyPayloadSending(event: unknown, api: OpenClawLikeApi): unknow
 
   const replyEvent = event as ReplyPayloadSendingEventLike;
   if (!shouldHandleChannel(replyEvent, resolvedConfig.channels)) return undefined;
+  if (
+    !shouldHandleChannelId(
+      isRecord(ctx) ? (ctx as ReplyPayloadSendingContextLike) : {},
+      resolvedConfig.channelIds,
+    )
+  ) {
+    return undefined;
+  }
   if (!replyEvent.payload || !isRecord(replyEvent.payload)) return undefined;
 
   const originalText = readTextPayload(replyEvent.payload);
@@ -89,8 +121,13 @@ export function register(api: OpenClawLikeApi): void {
   // because turn_start was not proven as a plugin hook, and tool-call counting
   // needs a live test before it should influence production replies.
   if (typeof api.registerHook === "function") {
-    api.registerHook("reply_payload_sending", (event) =>
-      handleReplyPayloadSending(event, api),
+    api.registerHook("reply_payload_sending", (event, ctx) =>
+      handleReplyPayloadSending(event, ctx, api),
+      {
+        name: "openclaw-discord-status-line.reply-payload-sending",
+        description: "Append a passive status line to selected Discord replies.",
+        timeoutMs: 1000,
+      },
     );
     return;
   }
@@ -98,8 +135,8 @@ export function register(api: OpenClawLikeApi): void {
   if (typeof api.on === "function") {
     // Extension-style registration is kept as a defensive loader fallback only.
     // The intended OpenClaw hook remains reply_payload_sending.
-    api.on("reply_payload_sending", (event) =>
-      handleReplyPayloadSending(event, api),
+    api.on("reply_payload_sending", (event, ctx) =>
+      handleReplyPayloadSending(event, ctx, api),
     );
   }
 }
