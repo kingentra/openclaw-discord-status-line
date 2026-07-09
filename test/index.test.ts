@@ -3,6 +3,23 @@ import test from "node:test";
 
 import { register } from "../src/index.ts";
 
+const DIAGNOSTIC_KEYS = [
+  "hook",
+  "configEnabled",
+  "payloadPresent",
+  "payloadObject",
+  "payloadFieldNames",
+  "readableTextFieldName",
+  "readableTextPresent",
+  "usageStatePresent",
+  "contextPresent",
+  "platformPresent",
+  "platformMatched",
+  "channelIdPresent",
+  "attemptedInPlaceMutation",
+  "returnedMutation",
+];
+
 test("registers only reply_payload_sending with registerHook", () => {
   const registrations: string[] = [];
 
@@ -227,4 +244,175 @@ test("reply hook ignores missing payloads and non-matching platform filters safe
     }),
     undefined,
   );
+});
+
+test("reply hook diagnostics are disabled by default", () => {
+  let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
+  const diagnostics: unknown[] = [];
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+    },
+    diagnostics: {
+      record(summary) {
+        diagnostics.push(summary);
+      },
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  handler({
+    channel: "discord",
+    payload: {
+      text: "reply body",
+    },
+  });
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("reply hook diagnostics contain only allowed structural keys", () => {
+  let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
+  const diagnostics: Array<Record<string, unknown>> = [];
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+      diagnostics: {
+        enabled: true,
+        safeStructuralLogging: true,
+      },
+    },
+    diagnostics: {
+      record(summary) {
+        diagnostics.push(summary);
+      },
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  handler(
+    {
+      channel: "discord",
+      unknownEventField: "unknown event value",
+      usageState: {
+        hiddenUsageValue: "do not collect",
+      },
+      payload: {
+        text: "message body must not appear",
+        body: "secondary body must not appear",
+        content: "content body must not appear",
+        unknownPayloadField: "unknown payload value",
+      },
+    },
+    {
+      conversationId: "CHANNEL_ID_VALUE_SHOULD_NOT_APPEAR",
+    },
+  );
+
+  assert.equal(diagnostics.length, 1);
+  const [summary] = diagnostics;
+  assert.deepEqual(Object.keys(summary), DIAGNOSTIC_KEYS);
+  assert.deepEqual(summary.payloadFieldNames, ["text", "body", "content"]);
+  assert.equal(summary.readableTextFieldName, "text");
+  assert.equal(summary.readableTextPresent, true);
+  assert.equal(summary.usageStatePresent, true);
+  assert.equal(summary.contextPresent, true);
+  assert.equal(summary.platformPresent, true);
+  assert.equal(summary.platformMatched, true);
+  assert.equal(summary.channelIdPresent, true);
+  assert.equal(summary.attemptedInPlaceMutation, true);
+  assert.equal(summary.returnedMutation, true);
+
+  const serialized = JSON.stringify(summary);
+  assert.equal(serialized.includes("message body must not appear"), false);
+  assert.equal(serialized.includes("secondary body must not appear"), false);
+  assert.equal(serialized.includes("content body must not appear"), false);
+  assert.equal(serialized.includes("CHANNEL_ID_VALUE_SHOULD_NOT_APPEAR"), false);
+  assert.equal(serialized.includes("unknownEventField"), false);
+  assert.equal(serialized.includes("unknownPayloadField"), false);
+  assert.equal(serialized.includes("hiddenUsageValue"), false);
+});
+
+test("reply hook diagnostics record channel ID presence only", () => {
+  let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
+  const diagnostics: Array<Record<string, unknown>> = [];
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+      diagnostics: {
+        enabled: true,
+        safeStructuralLogging: true,
+      },
+    },
+    recordDiagnostic(summary) {
+      diagnostics.push(summary);
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  handler(
+    {
+      channel: "discord",
+      payload: {
+        body: "message body must not appear",
+      },
+    },
+    {
+      conversationId: "channel:CHANNEL_ID_VALUE_SHOULD_NOT_APPEAR",
+    },
+  );
+
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].channelIdPresent, true);
+  assert.equal(
+    JSON.stringify(diagnostics[0]).includes("CHANNEL_ID_VALUE_SHOULD_NOT_APPEAR"),
+    false,
+  );
+});
+
+test("reply hook diagnostics respect safeStructuralLogging off switch", () => {
+  let handler: ((event: unknown, ctx?: unknown) => unknown) | undefined;
+  const diagnostics: unknown[] = [];
+
+  register({
+    pluginConfig: {
+      enabled: true,
+      channels: ["discord"],
+      diagnostics: {
+        enabled: true,
+        safeStructuralLogging: false,
+      },
+    },
+    recordDiagnostic(summary) {
+      diagnostics.push(summary);
+    },
+    registerHook(_event, registeredHandler) {
+      handler = registeredHandler;
+    },
+  });
+
+  assert.ok(handler);
+  handler({
+    channel: "discord",
+    payload: {
+      text: "reply body",
+    },
+  });
+
+  assert.deepEqual(diagnostics, []);
 });

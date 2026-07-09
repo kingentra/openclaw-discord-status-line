@@ -44,6 +44,24 @@
       "separator": {
         "type": "string",
         "default": "\n\n"
+      },
+      "diagnostics": {
+        "type": "object",
+        "additionalProperties": false,
+        "default": {
+          "enabled": false,
+          "safeStructuralLogging": true
+        },
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "safeStructuralLogging": {
+            "type": "boolean",
+            "default": true
+          }
+        }
       }
     }
   }

@@ -110,7 +110,11 @@ See [examples/openclaw.config.example.json](examples/openclaw.config.example.jso
         "template": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*",
         "fallbackTemplate": "-# *{duration} • tools:{tool_calls} • {model}*",
         "includeWhenUnknown": true,
-        "separator": "\n\n"
+        "separator": "\n\n",
+        "diagnostics": {
+          "enabled": false,
+          "safeStructuralLogging": true
+        }
       }
     }
   }
@@ -157,17 +161,53 @@ This plugin should not expose session IDs, account IDs, sender IDs, raw prompts,
 
 v0.1.1 does not access the Discord token directly. It does not call Discord REST APIs. It does not send separate follow-up messages. It only attempts to modify the outbound reply payload through OpenClaw's hook system.
 
-If an opt-in diagnostic mode is added, it must remain disabled by default and
-must log only structural facts such as field names, booleans, counts, and
-generic platform/channel-id presence flags. It must not log tokens, secrets,
-raw prompts, tool arguments, tool results, private channel names, user IDs,
-Discord channel IDs, local runtime paths, private logs, or config values.
+## Diagnostic Mode
+
+Diagnostics are disabled by default:
+
+```json
+{
+  "diagnostics": {
+    "enabled": false,
+    "safeStructuralLogging": true
+  }
+}
+```
+
+When enabled, diagnostics are collected only through an explicit diagnostic
+recorder callback. The plugin does not print diagnostics to console by default.
+
+The diagnostic summary is structural only and may contain these fields:
+
+- `hook`
+- `configEnabled`
+- `payloadPresent`
+- `payloadObject`
+- `payloadFieldNames`, filtered to `text`, `body`, and `content`
+- `readableTextFieldName`, only `text`, `body`, or `content`
+- `readableTextPresent`
+- `usageStatePresent`
+- `contextPresent`
+- `platformPresent`
+- `platformMatched`
+- `channelIdPresent`
+- `attemptedInPlaceMutation`
+- `returnedMutation`
+
+Diagnostics must not contain tokens, secrets, API keys, auth headers, config
+values, raw prompts, raw replies, message text, model output text, tool
+arguments, tool results, private channel names, user IDs, account IDs, sender
+IDs, Discord channel IDs, message IDs, request IDs, session IDs, full
+conversation IDs, local machine paths, runtime config paths, private logs, or
+environment variable values.
 
 ## Development Status
 
 - Pure formatting helpers exist and are covered by local tests.
 - `src/index.ts` registers only the intended `reply_payload_sending` hook.
 - Missing metadata and missing payloads are handled defensively.
+- Safe structural diagnostics are opt-in, disabled by default, and covered by
+  local tests.
 - Live hook loading and payload mutation are not proven; the failed live test
   indicates the Discord reply payload was not successfully mutated.
 - The next investigation step is safe structural verification of the live hook

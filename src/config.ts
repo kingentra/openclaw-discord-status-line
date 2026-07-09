@@ -6,6 +6,10 @@ export type StatusLineConfig = {
   fallbackTemplate: string;
   includeWhenUnknown: boolean;
   separator: string;
+  diagnostics: {
+    enabled: boolean;
+    safeStructuralLogging: boolean;
+  };
 };
 
 export const DEFAULT_TEMPLATE =
@@ -22,6 +26,10 @@ export const DEFAULT_CONFIG: StatusLineConfig = {
   fallbackTemplate: DEFAULT_FALLBACK_TEMPLATE,
   includeWhenUnknown: true,
   separator: "\n\n",
+  diagnostics: {
+    enabled: false,
+    safeStructuralLogging: true,
+  },
 };
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
@@ -47,6 +55,21 @@ function readChannelIds(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function readDiagnostics(value: unknown): StatusLineConfig["diagnostics"] {
+  const source =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+
+  return {
+    enabled: readBoolean(source.enabled, DEFAULT_CONFIG.diagnostics.enabled),
+    safeStructuralLogging: readBoolean(
+      source.safeStructuralLogging,
+      DEFAULT_CONFIG.diagnostics.safeStructuralLogging,
+    ),
+  };
+}
+
 export function resolveStatusLineConfig(input: unknown): StatusLineConfig {
   const source =
     input && typeof input === "object" && !Array.isArray(input)
@@ -67,5 +90,6 @@ export function resolveStatusLineConfig(input: unknown): StatusLineConfig {
       DEFAULT_CONFIG.includeWhenUnknown,
     ),
     separator: readString(source.separator, DEFAULT_CONFIG.separator),
+    diagnostics: readDiagnostics(source.diagnostics),
   };
 }

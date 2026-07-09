@@ -63,21 +63,21 @@ generic presence flags:
 - `readableTextFieldName`
 - `readableTextPresent`
 - `usageStatePresent`
-- `usageStateObject`
 - `contextPresent`
-- `contextObject`
-- `conversationIdPresent`
 - `platformPresent`
 - `platformMatched`
-- `configuredChannelIdAllowlistPresent`
+- `channelIdPresent`
 - `attemptedInPlaceMutation`
 - `returnedMutation`
-- `deliveredFooterPresent`
 
-Field-name lists must be allowlisted to structural keys such as `channel`,
-`kind`, `payload`, `usageState`, `text`, `body`, and `content`. Unknown field
-names should be counted but not printed unless they are manually reviewed and
-added to the allowlist.
+`payloadFieldNames` must be filtered to the allowlisted payload keys `text`,
+`body`, and `content`. `readableTextFieldName` may only be one of those same
+three names. Unknown field names must not be printed.
+
+The current implementation collects this summary only through an explicit
+diagnostic recorder callback when both `diagnostics.enabled` and
+`diagnostics.safeStructuralLogging` are true. It does not print diagnostics to
+console by default.
 
 ## Data That Must Never Be Logged
 

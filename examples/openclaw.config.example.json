@@ -15,7 +15,11 @@
         "template": "-# *{duration} • ctx {ctx_pct} • {tokens} • tools:{tool_calls} • {model}*",
         "fallbackTemplate": "-# *{duration} • tools:{tool_calls} • {model}*",
         "includeWhenUnknown": true,
-        "separator": "\n\n"
+        "separator": "\n\n",
+        "diagnostics": {
+          "enabled": false,
+          "safeStructuralLogging": true
+        }
       }
     }
   }

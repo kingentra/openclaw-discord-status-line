@@ -1,8 +1,30 @@
 import { resolveStatusLineConfig } from "./config.ts";
 import { appendStatusLineToText } from "./format-status-line.ts";
+import type { StatusLineConfig } from "./config.ts";
+
+type DiagnosticSummary = {
+  hook: "reply_payload_sending";
+  configEnabled: boolean;
+  payloadPresent: boolean;
+  payloadObject: boolean;
+  payloadFieldNames: Array<"text" | "body" | "content">;
+  readableTextFieldName?: "text" | "body" | "content";
+  readableTextPresent: boolean;
+  usageStatePresent: boolean;
+  contextPresent: boolean;
+  platformPresent: boolean;
+  platformMatched: boolean;
+  channelIdPresent: boolean;
+  attemptedInPlaceMutation: boolean;
+  returnedMutation: boolean;
+};
 
 type OpenClawLikeApi = {
   pluginConfig?: unknown;
+  diagnostics?: {
+    record?: (summary: DiagnosticSummary) => void;
+  };
+  recordDiagnostic?: (summary: DiagnosticSummary) => void;
   on?: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => void;
   registerHook?: (
     events: string | string[],
@@ -32,6 +54,8 @@ type ReplyPayloadSendingContextLike = {
   conversationId?: unknown;
 };
 
+const SAFE_PAYLOAD_FIELD_NAMES = ["text", "body", "content"] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -41,6 +65,17 @@ function readTextPayload(payload: ReplyPayloadLike | undefined): string | undefi
   for (const key of ["text", "body", "content"] as const) {
     const value = payload[key];
     if (typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+function readTextPayloadFieldName(
+  payload: ReplyPayloadLike | undefined,
+): "text" | "body" | "content" | undefined {
+  if (!payload) return undefined;
+  for (const key of SAFE_PAYLOAD_FIELD_NAMES) {
+    const value = payload[key];
+    if (typeof value === "string") return key;
   }
   return undefined;
 }
@@ -68,6 +103,58 @@ function mutateTextPayloadInPlace(payload: ReplyPayloadLike, text: string): void
   payload.text = text;
 }
 
+function collectSafePayloadFieldNames(
+  payload: ReplyPayloadLike | undefined,
+): Array<"text" | "body" | "content"> {
+  if (!payload || !isRecord(payload)) return [];
+  return SAFE_PAYLOAD_FIELD_NAMES.filter((key) =>
+    Object.prototype.hasOwnProperty.call(payload, key),
+  );
+}
+
+function createDiagnosticSummary(
+  event: unknown,
+  ctx: unknown,
+  config: StatusLineConfig,
+): DiagnosticSummary {
+  const replyEvent = isRecord(event) ? (event as ReplyPayloadSendingEventLike) : {};
+  const payload = isRecord(replyEvent.payload) ? replyEvent.payload : undefined;
+  const readableTextFieldName = readTextPayloadFieldName(payload);
+  const context = isRecord(ctx) ? (ctx as ReplyPayloadSendingContextLike) : undefined;
+  const platform = typeof replyEvent.channel === "string" ? replyEvent.channel : undefined;
+
+  return {
+    hook: "reply_payload_sending",
+    configEnabled: config.enabled,
+    payloadPresent: isRecord(event) && "payload" in event,
+    payloadObject: Boolean(payload),
+    payloadFieldNames: collectSafePayloadFieldNames(payload),
+    readableTextFieldName,
+    readableTextPresent: Boolean(readableTextFieldName),
+    usageStatePresent: replyEvent.usageState !== undefined,
+    contextPresent: ctx !== undefined && ctx !== null,
+    platformPresent: Boolean(platform),
+    platformMatched: Boolean(platform && config.channels.includes(platform)),
+    channelIdPresent: Boolean(
+      context &&
+        typeof context.conversationId === "string" &&
+        context.conversationId.length > 0,
+    ),
+    attemptedInPlaceMutation: false,
+    returnedMutation: false,
+  };
+}
+
+function recordDiagnosticIfEnabled(
+  api: OpenClawLikeApi,
+  config: StatusLineConfig,
+  summary: DiagnosticSummary,
+): void {
+  if (!config.diagnostics.enabled || !config.diagnostics.safeStructuralLogging) return;
+  const record = api.diagnostics?.record ?? api.recordDiagnostic;
+  if (typeof record === "function") record(summary);
+}
+
 function shouldHandleChannel(event: ReplyPayloadSendingEventLike, channels: string[]): boolean {
   const channel = typeof event.channel === "string" ? event.channel : undefined;
   if (!channel) return false;
@@ -91,25 +178,30 @@ function shouldHandleChannelId(ctx: ReplyPayloadSendingContextLike, channelIds: 
 }
 
 function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLikeApi): unknown {
-  if (!isRecord(event)) return undefined;
-
   const resolvedConfig = resolveStatusLineConfig(api.pluginConfig);
-  if (!resolvedConfig.enabled) return undefined;
+  const diagnostic = createDiagnosticSummary(event, ctx, resolvedConfig);
+  const finish = (result: unknown): unknown => {
+    recordDiagnosticIfEnabled(api, resolvedConfig, diagnostic);
+    return result;
+  };
+
+  if (!isRecord(event)) return finish(undefined);
+  if (!resolvedConfig.enabled) return finish(undefined);
 
   const replyEvent = event as ReplyPayloadSendingEventLike;
-  if (!shouldHandleChannel(replyEvent, resolvedConfig.channels)) return undefined;
+  if (!shouldHandleChannel(replyEvent, resolvedConfig.channels)) return finish(undefined);
   if (
     !shouldHandleChannelId(
       isRecord(ctx) ? (ctx as ReplyPayloadSendingContextLike) : {},
       resolvedConfig.channelIds,
     )
   ) {
-    return undefined;
+    return finish(undefined);
   }
-  if (!replyEvent.payload || !isRecord(replyEvent.payload)) return undefined;
+  if (!replyEvent.payload || !isRecord(replyEvent.payload)) return finish(undefined);
 
   const originalText = readTextPayload(replyEvent.payload);
-  if (originalText === undefined) return undefined;
+  if (originalText === undefined) return finish(undefined);
 
   const appended = appendStatusLineToText(
     originalText,
@@ -123,7 +215,7 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
     resolvedConfig,
   );
 
-  if (!appended.appended) return undefined;
+  if (!appended.appended) return finish(undefined);
 
   const updatedPayload = writeTextPayload(replyEvent.payload, appended.text);
 
@@ -135,9 +227,11 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
   // Do not treat either form as confirmed until a controlled diagnostic test
   // proves the live OpenClaw reply contract.
   mutateTextPayloadInPlace(replyEvent.payload, appended.text);
-  return {
+  diagnostic.attemptedInPlaceMutation = true;
+  diagnostic.returnedMutation = true;
+  return finish({
     payload: updatedPayload,
-  };
+  });
 }
 
 export function register(api: OpenClawLikeApi): void {
