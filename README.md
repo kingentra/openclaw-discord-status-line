@@ -4,17 +4,21 @@ Draft v0.1.1 scaffold for an OpenClaw plugin that appends a compact status line 
 
 ## Current Status
 
-Local tests pass for the draft plugin helpers and hook handler assumptions.
-Live OpenClaw Discord hook integration is not proven.
+Local tests pass for the draft plugin helpers and researched hook handler
+contract. Live OpenClaw Discord hook integration is not proven.
 
 A controlled live test delivered only `STATUS LINE TEST OK`; no appended footer
 was seen in durable delivery state. Rollback completed, OpenClaw health was OK,
 and the plugin was not left installed or listed.
 
-The next investigation step is to verify the `reply_payload_sending` payload
-shape and mutation return contract with safe structural diagnostics before any
-new live attempt. Do not live-install this plugin until that contract is
-verified.
+The repo has been patched to match the researched modern OpenClaw plugin
+runtime contract: a default `definePluginEntry(...)`-shaped entry object,
+`api.on("reply_payload_sending", ...)`, and return-based payload mutation with
+`{ payload: updatedPayload }`.
+
+The next investigation step is a new controlled test to prove this patched
+entry loads in the live Gateway path and mutates the normalized Discord reply.
+Do not live-install this plugin until the operator approves that test.
 
 See [docs/failed-live-test-notes.md](docs/failed-live-test-notes.md) for the
 public-safe failure notes and diagnostic-mode design. See
@@ -30,11 +34,14 @@ live OpenClaw profile, enable it in runtime config, or restart OpenClaw until
 the hook payload contract is verified and the operator approves a new
 controlled test.
 
-The intended hook is `reply_payload_sending`. Static inspection of OpenClaw 2026.6.x showed that this hook exists and supports reply payload mutation, but the exact live payload shape, channel metadata, and mutation return contract still need non-production verification with safe diagnostics.
+The intended hook is `reply_payload_sending`. Static inspection of OpenClaw
+2026.6.x showed that this hook exists, is registered through `api.on(...)`, and
+supports return-based reply payload mutation.
 
-The current draft handler attempts both an in-place `event.payload` text-field
-mutation and a returned `{ payload: ... }` wrapper for compatibility. That is a
-defensive assumption, not proof of the live OpenClaw contract.
+The current handler returns `{ payload: ... }` as the primary mutation contract.
+It does not rely on in-place `event.payload` mutation. A `registerHook` fallback
+exists only for older loaders that do not expose `api.on`, and it still uses the
+same return-based mutation shape.
 
 ## What This Is
 
@@ -56,7 +63,12 @@ Unknown values render as `unknown`. If metadata is missing or incomplete, the pl
 
 ## Hook Scope
 
-v0.1.1 registers only `reply_payload_sending` by default.
+v0.1.1 registers only `reply_payload_sending` by default through the modern
+typed hook API:
+
+```ts
+api.on("reply_payload_sending", handler, { timeoutMs: 1000 });
+```
 
 The earlier draft referenced `turn_start` and `after_tool_call`; those are not active in this version. `turn_start` is not proven as a plugin hook, and tool-call counting does not have a verified turn-scoped source in the `reply_payload_sending` payload yet. Until a live OpenClaw test proves the correct source, `{tool_calls}` renders as `0`.
 
@@ -133,9 +145,9 @@ Keep both outer `enabled` and inner `config.enabled` false until a controlled te
 
 ## Safe One-Message Test Plan
 
-Use this only after the hook payload contract is verified and the operator
-explicitly approves install and restart/reload steps. No live install is
-recommended while the mutation return contract remains unverified.
+Use this only after the operator explicitly approves install and restart/reload
+steps. The repo is patched to the researched return-based hook contract, but no
+new live integration test has proven it in the running Gateway path yet.
 
 1. Confirm the git working tree is clean.
 2. Back up the relevant OpenClaw config/state before editing anything.
@@ -159,7 +171,7 @@ recommended while the mutation return contract remains unverified.
 
 This plugin should not expose session IDs, account IDs, sender IDs, raw prompts, private channel names, Discord channel IDs, tool arguments, tool results, or secrets in status lines. Status lines should stay limited to high-level operational metadata.
 
-v0.1.1 does not access the Discord token directly. It does not call Discord REST APIs. It does not send separate follow-up messages. It only attempts to modify the outbound reply payload through OpenClaw's hook system.
+v0.1.1 does not access the Discord token directly. It does not call Discord REST APIs. It does not send separate follow-up messages. It only returns an updated outbound reply payload through OpenClaw's hook system.
 
 ## Diagnostic Mode
 
@@ -204,14 +216,16 @@ environment variable values.
 ## Development Status
 
 - Pure formatting helpers exist and are covered by local tests.
-- `src/index.ts` registers only the intended `reply_payload_sending` hook.
+- `src/index.ts` exports a modern plugin entry object and registers only the
+  intended `reply_payload_sending` hook through `api.on(...)`.
 - Missing metadata and missing payloads are handled defensively.
 - Safe structural diagnostics are opt-in, disabled by default, and covered by
   local tests.
-- Live hook loading and payload mutation are not proven; the failed live test
-  indicates the Discord reply payload was not successfully mutated.
-- The next investigation step is safe structural verification of the live hook
-  payload shape and mutation return contract.
+- Live hook loading and payload mutation are not proven for the patched contract;
+  the earlier failed live test indicates the old draft did not successfully
+  mutate the Discord reply payload.
+- The next investigation step is safe structural verification that the patched
+  entry loads and the live reply path accepts the returned `{ payload }`.
 - The hook contract investigation plan is documented in
   [docs/hook-contract-investigation-plan.md](docs/hook-contract-investigation-plan.md).
 - No OpenClaw runtime files have been modified by this repo.

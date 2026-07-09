@@ -25,7 +25,15 @@ type OpenClawLikeApi = {
     record?: (summary: DiagnosticSummary) => void;
   };
   recordDiagnostic?: (summary: DiagnosticSummary) => void;
-  on?: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => void;
+  on?: (
+    event: string,
+    handler: (event: unknown, ctx?: unknown) => unknown,
+    opts?: {
+      name?: string;
+      description?: string;
+      timeoutMs?: number;
+    },
+  ) => void;
   registerHook?: (
     events: string | string[],
     handler: (event: unknown, ctx?: unknown) => unknown,
@@ -54,7 +62,25 @@ type ReplyPayloadSendingContextLike = {
   conversationId?: unknown;
 };
 
+type PluginEntry = {
+  id: string;
+  name: string;
+  description: string;
+  register: (api: OpenClawLikeApi) => void;
+};
+
 const SAFE_PAYLOAD_FIELD_NAMES = ["text", "body", "content"] as const;
+const PLUGIN_ID = "openclaw-discord-status-line";
+const REPLY_HOOK_NAME = "reply_payload_sending";
+const REPLY_HOOK_OPTS = {
+  name: `${PLUGIN_ID}.reply-payload-sending`,
+  description: "Append a passive status line to selected Discord replies.",
+  timeoutMs: 1000,
+};
+
+function definePluginEntry<TEntry extends PluginEntry>(entry: TEntry): TEntry {
+  return entry;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -85,22 +111,6 @@ function writeTextPayload(payload: ReplyPayloadLike, text: string): ReplyPayload
   if (typeof payload.body === "string") return { ...payload, body: text };
   if (typeof payload.content === "string") return { ...payload, content: text };
   return { ...payload, text };
-}
-
-function mutateTextPayloadInPlace(payload: ReplyPayloadLike, text: string): void {
-  if (typeof payload.text === "string") {
-    payload.text = text;
-    return;
-  }
-  if (typeof payload.body === "string") {
-    payload.body = text;
-    return;
-  }
-  if (typeof payload.content === "string") {
-    payload.content = text;
-    return;
-  }
-  payload.text = text;
 }
 
 function collectSafePayloadFieldNames(
@@ -219,15 +229,9 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
 
   const updatedPayload = writeTextPayload(replyEvent.payload, appended.text);
 
-  // Contract status: not proven. The failed live test may have missed the
-  // footer because OpenClaw expects in-place event.payload mutation, a returned
-  // wrapper shaped as { payload }, a different wrapper, or because the tested
-  // delivery path bypassed this hook. For now, try the two safest local forms:
-  // mutate the known payload text field in place and also return { payload }.
-  // Do not treat either form as confirmed until a controlled diagnostic test
-  // proves the live OpenClaw reply contract.
-  mutateTextPayloadInPlace(replyEvent.payload, appended.text);
-  diagnostic.attemptedInPlaceMutation = true;
+  // The researched modern OpenClaw typed hook contract is return-based:
+  // reply_payload_sending handlers return { payload: nextPayload }. In-place
+  // mutation is intentionally not used as the primary contract.
   diagnostic.returnedMutation = true;
   return finish({
     payload: updatedPayload,
@@ -235,35 +239,29 @@ function handleReplyPayloadSending(event: unknown, ctx: unknown, api: OpenClawLi
 }
 
 export function register(api: OpenClawLikeApi): void {
-  // Draft integration note:
-  // OpenClaw 2026.6.x exposes reply_payload_sending as a typed plugin hook.
-  // Other lifecycle/tool hooks are intentionally not registered in v0.1.1
-  // because turn_start was not proven as a plugin hook, and tool-call counting
-  // needs a live test before it should influence production replies.
-  if (typeof api.registerHook === "function") {
-    api.registerHook("reply_payload_sending", (event, ctx) =>
-      handleReplyPayloadSending(event, ctx, api),
-      {
-        name: "openclaw-discord-status-line.reply-payload-sending",
-        description: "Append a passive status line to selected Discord replies.",
-        timeoutMs: 1000,
-      },
+  // OpenClaw's modern plugin runtime exposes reply_payload_sending through the
+  // typed hook API. Keep registerHook only as an older-loader fallback when
+  // api.on is absent.
+  if (typeof api.on === "function") {
+    api.on(
+      REPLY_HOOK_NAME,
+      (event, ctx) => handleReplyPayloadSending(event, ctx, api),
+      REPLY_HOOK_OPTS,
     );
     return;
   }
 
-  if (typeof api.on === "function") {
-    // Extension-style registration is kept as a defensive loader fallback only.
-    // The intended OpenClaw hook remains reply_payload_sending.
-    api.on("reply_payload_sending", (event, ctx) =>
+  if (typeof api.registerHook === "function") {
+    api.registerHook(REPLY_HOOK_NAME, (event, ctx) =>
       handleReplyPayloadSending(event, ctx, api),
+      REPLY_HOOK_OPTS,
     );
   }
 }
 
-export default {
-  id: "openclaw-discord-status-line",
+export default definePluginEntry({
+  id: PLUGIN_ID,
   name: "OpenClaw Discord Status Line",
   description: "Draft inline Discord reply status line plugin for OpenClaw.",
   register,
-};
+});

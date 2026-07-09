@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { register } from "../src/index.ts";
+import pluginEntry, { register } from "../src/index.ts";
 
 const DIAGNOSTIC_KEYS = [
   "hook",
@@ -20,24 +20,47 @@ const DIAGNOSTIC_KEYS = [
   "returnedMutation",
 ];
 
-test("registers only reply_payload_sending with registerHook", () => {
+test("registers only reply_payload_sending with api.on", () => {
   const registrations: string[] = [];
 
   register({
-    registerHook(event) {
-      registrations.push(Array.isArray(event) ? event.join(",") : event);
+    on(event) {
+      registrations.push(event);
     },
   });
 
   assert.deepEqual(registrations, ["reply_payload_sending"]);
 });
 
-test("uses extension-style on fallback only for reply_payload_sending", () => {
+test("default export uses the modern plugin entry shape", () => {
+  assert.equal(pluginEntry.id, "openclaw-discord-status-line");
+  assert.equal(pluginEntry.name, "OpenClaw Discord Status Line");
+  assert.equal(typeof pluginEntry.register, "function");
+});
+
+test("uses api.on as the primary typed hook path when both APIs exist", () => {
   const registrations: string[] = [];
+  let registerHookCalled = false;
 
   register({
     on(event) {
-      registrations.push(event);
+      registrations.push(`on:${event}`);
+    },
+    registerHook() {
+      registerHookCalled = true;
+    },
+  });
+
+  assert.deepEqual(registrations, ["on:reply_payload_sending"]);
+  assert.equal(registerHookCalled, false);
+});
+
+test("falls back to registerHook only when api.on is unavailable", () => {
+  const registrations: string[] = [];
+
+  register({
+    registerHook(event) {
+      registrations.push(Array.isArray(event) ? event.join(",") : event);
     },
   });
 
@@ -52,7 +75,7 @@ test("reply hook appends fallback metadata without throwing when usageState is m
       enabled: true,
       channels: ["discord"],
     },
-    registerHook(event, registeredHandler) {
+    on(event, registeredHandler) {
       assert.equal(event, "reply_payload_sending");
       handler = registeredHandler;
     },
@@ -81,7 +104,7 @@ test("reply hook returns a wrapper with a modified payload", () => {
       enabled: true,
       channels: ["discord"],
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -105,7 +128,7 @@ test("reply hook returns a wrapper with a modified payload", () => {
   assert.deepEqual(Object.keys(result as Record<string, unknown>), ["payload"]);
 });
 
-test("reply hook also mutates event.payload in place for compatibility", () => {
+test("reply hook uses return-based payload mutation without in-place mutation", () => {
   let handler: ((event: unknown) => unknown) | undefined;
 
   register({
@@ -113,7 +136,7 @@ test("reply hook also mutates event.payload in place for compatibility", () => {
       enabled: true,
       channels: ["discord"],
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -128,7 +151,7 @@ test("reply hook also mutates event.payload in place for compatibility", () => {
   };
   const result = handler(event);
 
-  assert.equal(event.payload.body, "reply body\n\n-# *unknown • tools:0 • unknown*");
+  assert.equal(event.payload.body, "reply body");
   assert.equal(event.payload.untouched, true);
   assert.deepEqual(result, {
     payload: {
@@ -138,7 +161,7 @@ test("reply hook also mutates event.payload in place for compatibility", () => {
   });
 });
 
-test("reply hook wrapper payload preserves object shape after in-place mutation", () => {
+test("reply hook wrapper payload preserves object shape without mutating event", () => {
   let handler: ((event: unknown) => unknown) | undefined;
 
   register({
@@ -146,7 +169,7 @@ test("reply hook wrapper payload preserves object shape after in-place mutation"
       enabled: true,
       channels: ["discord"],
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -167,7 +190,7 @@ test("reply hook wrapper payload preserves object shape after in-place mutation"
       body: "secondary body",
     },
   });
-  assert.equal(event.payload.text, result.payload?.text);
+  assert.equal(event.payload.text, "reply body");
 });
 
 test("reply hook only handles configured Discord channel IDs when allowlist is set", () => {
@@ -179,7 +202,7 @@ test("reply hook only handles configured Discord channel IDs when allowlist is s
       channels: ["discord"],
       channelIds: ["YOUR_TEST_CHANNEL_ID_HERE"],
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -228,7 +251,7 @@ test("reply hook ignores missing payloads and non-matching platform filters safe
       enabled: true,
       channels: ["discord"],
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -260,7 +283,7 @@ test("reply hook diagnostics are disabled by default", () => {
         diagnostics.push(summary);
       },
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -294,7 +317,7 @@ test("reply hook diagnostics contain only allowed structural keys", () => {
         diagnostics.push(summary);
       },
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -330,7 +353,7 @@ test("reply hook diagnostics contain only allowed structural keys", () => {
   assert.equal(summary.platformPresent, true);
   assert.equal(summary.platformMatched, true);
   assert.equal(summary.channelIdPresent, true);
-  assert.equal(summary.attemptedInPlaceMutation, true);
+  assert.equal(summary.attemptedInPlaceMutation, false);
   assert.equal(summary.returnedMutation, true);
 
   const serialized = JSON.stringify(summary);
@@ -359,7 +382,7 @@ test("reply hook diagnostics record channel ID presence only", () => {
     recordDiagnostic(summary) {
       diagnostics.push(summary);
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });
@@ -401,7 +424,7 @@ test("reply hook diagnostics respect safeStructuralLogging off switch", () => {
     recordDiagnostic(summary) {
       diagnostics.push(summary);
     },
-    registerHook(_event, registeredHandler) {
+    on(_event, registeredHandler) {
       handler = registeredHandler;
     },
   });

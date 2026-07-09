@@ -1,37 +1,39 @@
 # Hook Contract Investigation Plan
 
-This plan defines how to learn the real OpenClaw `reply_payload_sending`
-payload and mutation contract without exposing private runtime data. It is a
+This plan defines how to verify the patched OpenClaw `reply_payload_sending`
+entry and payload contract without exposing private runtime data. It is a
 design note only; it is not a live-test record or an install guide.
 
 ## Current Unknowns
 
 The failed live test proved only that the footer was not appended to the
-delivered Discord reply. It did not prove why. The likely blocker is that this
-draft plugin does not yet know the exact live hook payload shape or mutation
-return contract.
+delivered Discord reply. It did not prove why. Later research found the modern
+runtime contract: default plugin entry, `api.on("reply_payload_sending", ...)`,
+and return-based mutation with `{ payload: updatedPayload }`.
 
-The current draft handler is intentionally defensive and assumes these payload
-text fields may exist:
+The current patched handler still handles these safe payload text fields because
+the live Discord payload shape has not been re-tested:
 
 - `payload.text`
 - `payload.body`
 - `payload.content`
 
-It also assumes that OpenClaw may accept one of these mutation styles:
+It uses the evidence-backed mutation style:
 
 - a returned wrapper object shaped like `{ payload: updatedPayload }`
-- an in-place mutation of `event.payload`
-- both in-place mutation and a returned wrapper object
 
-None of those mutation styles is proven for the live Discord reply path yet.
+In-place mutation of `event.payload` is not the primary contract and is not used
+by the patched handler. The remaining unknown is whether this plugin entry is
+loaded in the live Gateway path being tested and whether that path produces a
+normalized Discord reply payload.
 
 ## Exact Hook Data To Learn
 
 A later controlled diagnostic test needs to learn only structural facts:
 
 - Whether the plugin is loaded.
-- Whether `registerHook` is called.
+- Whether `api.on` is called for `reply_payload_sending`.
+- Whether `registerHook` is avoided on the primary runtime path.
 - Whether the registered `reply_payload_sending` handler is called.
 - Whether the hook event is an object.
 - Which safe top-level event field names are present.
@@ -42,7 +44,7 @@ A later controlled diagnostic test needs to learn only structural facts:
 - Whether context is present and object-shaped.
 - Whether context includes a conversation/channel identifier field, as a
   boolean only.
-- Whether the handler attempts an in-place mutation.
+- Whether the handler avoids in-place mutation.
 - Whether the handler returns a mutation value.
 - Whether the delivered reply includes the diagnostic footer.
 
@@ -53,6 +55,7 @@ generic presence flags:
 
 - `hook`
 - `pluginLoaded`
+- `apiOnCalled`
 - `registerHookCalled`
 - `handlerCalled`
 - `eventObject`
@@ -104,7 +107,7 @@ by default. The test should record only these structural milestones:
 
 1. Plugin module loaded.
 2. `register(api)` called.
-3. `api.registerHook("reply_payload_sending", ...)` called.
+3. `api.on("reply_payload_sending", ...)` called.
 4. Handler invoked for a generic Discord reply event.
 5. Handler saw an object-shaped event.
 6. Handler saw object-shaped payload.
@@ -119,22 +122,22 @@ payload shape differs from the current draft assumptions.
 ## Verify The Mutation Contract
 
 The later controlled test should attempt one footer append using a short,
-generic diagnostic marker. The handler can safely attempt both mutation styles:
+generic diagnostic marker. The handler should use the researched return-based
+mutation contract:
 
 1. Create an updated payload that preserves original safe payload fields.
-2. Mutate the detected text field on `event.payload` in place.
-3. Return a wrapper object shaped like `{ payload: event.payload }`.
-4. Log only `attemptedInPlaceMutation: true` and `returnedMutation: true`.
-5. Check the delivered reply for the diagnostic footer.
+2. Return a wrapper object shaped like `{ payload: updatedPayload }`.
+3. Log only `attemptedInPlaceMutation: false` and `returnedMutation: true`.
+4. Check the delivered reply for the diagnostic footer.
 
 Interpretation:
 
-- If the handler fires and the footer appears, at least one attempted mutation
-  style worked. A follow-up fixture or host-side inspection is needed to narrow
-  which one.
-- If the handler fires, payload text is readable, mutation is attempted, and the
-  footer does not appear, OpenClaw may require a different return shape or may
-  ignore reply mutations for that delivery path.
+- If the handler fires and the footer appears, the researched return-based
+  mutation style worked in the live Discord reply path.
+- If the handler fires, payload text is readable, return-based mutation is
+  attempted, and the footer does not appear, OpenClaw may be using a different
+  delivery path, the Gateway may not have loaded the patched entry, or the live
+  route may not be producing a normalized reply payload for this hook.
 - If the handler does not fire, the blocker is hook registration, plugin
   loading, or a delivery path that bypasses the hook.
 
